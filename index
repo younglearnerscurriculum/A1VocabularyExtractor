@@ -23,6 +23,7 @@
       padding: 10px;
       border: 2px solid #90e0ef;
       border-radius: 8px;
+      resize: vertical;
     }
     button {
       background: #90e0ef;
@@ -36,15 +37,11 @@
     button:hover {
       background: #48cae4;
     }
-    .vocab-box {
-      display: inline-block;
-      background: #caf0f8;
-      border-radius: 10px;
-      padding: 15px;
-      margin: 10px;
+    .vocab-list {
       font-size: 24px;
-      font-weight: bold;
       color: #03045e;
+      font-weight: bold;
+      margin: 20px 0;
     }
     footer {
       margin-top: 40px;
@@ -56,75 +53,71 @@
 <body>
 
 <h1>🌟 CEFR A1 Vocabulary Extractor</h1>
-<p>Paste your story below:</p>
+<p>Paste your story below and click extract:</p>
 
 <textarea id="text" placeholder="Paste your story here..."></textarea><br>
-<button onclick="extractVocab()">Extract Vocabulary</button>
+<button id="extractBtn">Extract Vocabulary</button>
 
 <div id="results"></div>
 
 <footer>Created by Young Learners Curriculum © 2025</footer>
 
 <script>
-// Static CEFR A1 word list (real words ≤5 letters)
-const cefrWords = new Set([
-  'apple','house','table','chair','water',
-  'happy','small','green','light','child',
-  'smile','heart','dream','world','family',
-  'learn','clean','brown','white','black',
-  'grass','story','sound','book','pen',
-  'bag','mouse','train','plane','cloud',
-  'tree','fish','bird','sun','moon',
-  'milk','eggs','bread','fruit'
-]);
+(function() {
+  const extractBtn = document.getElementById('extractBtn');
+  extractBtn.addEventListener('click', extractVocab);
 
-// Exclude articles and common function words
-const excludedWords = new Set([
-  'a','an','the','and','but','or','so','if','for','nor','yet','with','from','that'
-]);
+  // Function words to exclude
+  const exclude = new Set(['a','an','the','and','but','or','so','if','for','nor','yet','with','from','that','in','on','at','by','to','of']);
 
-function extractVocab() {
-  const text = document.getElementById('text').value.toLowerCase().trim();
-  if (!text) {
-    alert('Paste your story to extract words.');
-    return;
-  }
+  function extractVocab() {
+    const raw = document.getElementById('text').value;
+    const results = document.getElementById('results');
+    results.innerHTML = '';
+    if (!raw.trim()) {
+      alert('Please paste your story.');
+      return;
+    }
 
-  // Clean and split
-  const tokens = text.replace(/[^a-z\s]/g, ' ').split(/\s+/);
+    const tokens = raw.match(/\b[\w']+\b/g) || [];
+    const candidates = [];
 
-  // Filter: length 2–5, in A1 list, not excluded
-  const filtered = tokens.filter(w =>
-    w.length >= 2 && w.length <= 5 &&
-    cefrWords.has(w) &&
-    !excludedWords.has(w)
-  );
+    tokens.forEach(tok => {
+      // Exclude proper nouns
+      if (/^[A-Z]/.test(tok)) return;
+      let w = tok.toLowerCase().replace(/[^a-z]/g, '');
+      if (!w) return;
+      // Strip 'ing' or 'ed' suffix to base form
+      if (w.endsWith('ing') && w.length > 5) {
+        w = w.slice(0, -3);
+      } else if (w.endsWith('ed') && w.length > 4) {
+        w = w.slice(0, -2);
+      }
+      // Check length and exclude function words
+      if (w.length >= 2 && w.length <= 5 && !exclude.has(w)) {
+        candidates.push(w);
+      }
+    });
 
-  // Unique and shuffle
-  const unique = Array.from(new Set(filtered));
-  for (let i = unique.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [unique[i], unique[j]] = [unique[j], unique[i]];
-  }
+    const unique = Array.from(new Set(candidates));
+    // Shuffle
+    for (let i = unique.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [unique[i], unique[j]] = [unique[j], unique[i]];
+    }
 
-  // Select up to 4
-  const selected = unique.slice(0, 4);
+    const selected = unique.slice(0, 4);
+    if (selected.length < 4) {
+      results.innerHTML = `<p>Found only ${selected.length} word${selected.length !== 1 ? 's' : ''}. Need 4.</p>`;
+      return;
+    }
 
-  // Display
-  const container = document.getElementById('results');
-  container.innerHTML = '';
-  if (selected.length === 0) {
-    container.innerHTML = '<p>No matching words found.</p>';
-    return;
-  }
-
-  selected.forEach(w => {
     const div = document.createElement('div');
-    div.className = 'vocab-box';
-    div.textContent = w.toUpperCase();
-    container.appendChild(div);
-  });
-}
+    div.className = 'vocab-list';
+    div.textContent = selected.join(', ');
+    results.appendChild(div);
+  }
+})();
 </script>
 
 </body>
