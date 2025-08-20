@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vocabulary Extractor</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vocabulary Extractor (A1 Verbs/Nouns)</title>
   <style>
     body { font-family: 'Comic Sans MS', cursive; background: #f0f9ff; text-align: center; padding: 20px; }
     h1 { color: #0077b6; margin-bottom: 10px; }
-    textarea { width: 80%; height: 120px; font-size: 16px; margin-bottom: 10px; padding: 10px; border: 2px solid #90e0ef; border-radius: 8px; resize: vertical; }
+    textarea { width: 80%; height: 140px; font-size: 16px; margin: 10px auto; padding: 10px; border: 2px solid #90e0ef; border-radius: 8px; resize: vertical; display:block; }
+    .controls { display:flex; gap:14px; align-items:center; justify-content:center; margin: 10px 0; flex-wrap:wrap; }
+    .controls label { font-size: 16px; color:#023e8a; }
     button { background: #90e0ef; border: none; padding: 10px 20px; font-size: 18px; border-radius: 10px; cursor: pointer; }
     button:hover { background: #48cae4; }
     .vocab-list { font-size: 24px; color: #03045e; font-weight: bold; margin: 20px 0; }
@@ -16,72 +18,202 @@
 </head>
 <body>
   <h1>🌟 Vocabulary Extractor</h1>
-  <p>Paste your story below and click extract:</p>
-  <textarea id="text" placeholder="Paste your story here..."></textarea><br>
-  <button id="extractBtn">Extract Vocabulary</button>
+  <p>Paste your story, choose categories, and extract base-form A1 words (3–5 letters).</p>
+
+  <textarea id="text" placeholder="Paste your story here..."></textarea>
+
+  <div class="controls">
+    <label><input type="checkbox" id="wantVerbs" checked> Verbs</label>
+    <label><input type="checkbox" id="wantNouns" checked> Nouns</label>
+    <label>Need:
+      <select id="needCount">
+        <option>4</option><option>6</option><option>8</option><option>10</option>
+      </select>
+    </label>
+    <button id="extractBtn">Extract Vocabulary</button>
+  </div>
+
   <div id="results"></div>
   <footer>© 2025 Young Learners Curriculum</footer>
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const excludeWords = new Set(['a','an','the','and','but','or','so','if','for','nor','yet','with','from','that','in','on','at','by','to','of']);
-    const suffixRules = [
-      {end: 'ies', replace: w => w.slice(0, -1)},            // movies → movie
-      {end: 'ing', replace: w => w.slice(0, -3)},              // playing → play
-      {end: 'ed',  replace: w => w.slice(0, -2)},              // enjoyed → enjoy
-      {end: 'es',  replace: w => w.slice(0, -2) + 'e'},        // places → place
-      {end: 's',   replace: w => w.slice(0, -1)}               // cars → car
-    ];
+    // ====== CEFR A1-ish wordlists (3–5 letters only) ======
+    // You can extend/refine these lists as you like.
+    const A1_VERBS = new Set([
+      // 3 letters
+      'add','ask','buy','cut','dry','eat','fix','get','mix','put','use',
+      // 4 letters
+      'bake','call','care','cook','draw','drop','film','find','give','help','hear','hide','hold',
+      'join','jump','keep','know','like','live','look','love','make','mean','meet','move','need',
+      'open','play','read','ride','ring','save','send','show','sing','sit','sleep'.slice(0,4), // keep 4–5 only; handled below
+      'stay','stop','take','talk','tell','test','turn','wait','walk','wash','wear','work',
+      // 5 letters
+      'build','clean','close','drink','laugh','learn','leave','light','plant','sleep','smile',
+      'start','study','teach','think','write','watch' // 5 letters ok
+    ]);
+    // Remove any mistakenly short/long entries (safety, though we curated already)
+    [...A1_VERBS].forEach(w => { if (w.length < 3 || w.length > 5) A1_VERBS.delete(w); });
 
-    document.getElementById('extractBtn').addEventListener('click', () => {
-      const raw = document.getElementById('text').value;
-      const results = document.getElementById('results');
-      results.innerHTML = '';
-      if (!raw.trim()) {
-        alert('Please paste your story.');
-        return;
+    const A1_NOUNS = new Set([
+      // 3 letters
+      'bag','bed','boy','bus','cat','cow','cup','day','dog','egg','fan','hat','kid','leg','man','map',
+      'mom','dad','pen','pig','sea','sun','toy','bed','box','car',
+      // 4 letters
+      'area','ball','bank','bath','beef','bell','bird','blue','boat','book','cake','camp','card','city',
+      'club','coat','cold','desk','door','farm','food','foot','girl','gift','hand','head','hill','home',
+      'hope','hour','lake','land','lion','list','meal','milk','park','part','pear','pool','road','room',
+      'salt','sand','seat','seed','ship','shoe','shop','size','snow','soap','song','soup','star','tree',
+      'trip','week','wind','wolf','word','work','yard',
+      // 5 letters
+      'apple','bread','chair','class','clock','color','floor','house','light','money','mouse','phone',
+      'plant','river','table','thing','watch','water'
+    ]);
+    [...A1_NOUNS].forEach(w => { if (w.length < 3 || w.length > 5) A1_NOUNS.delete(w); });
+
+    // ====== Stopwords (skip), basic helpers ======
+    const STOPWORDS = new Set([
+      'a','an','the','and','but','or','so','if','for','nor','yet','with','from','that','in','on','at','by','to','of',
+      'is','am','are','was','were','be','been','being','have','has','had','do','does','did','will','would','shall','should','may','might','must','can','could',
+      'as','not','very','much','than','then','there','here','this','these','those','it','its','we','us','you','your','yours','our','ours','their','theirs',
+      'he','him','his','she','her','hers','they','them','who','what','when','where','why','how'
+    ]);
+
+    const isConsonant = ch => /^[b-df-hj-np-tv-z]$/.test(ch);
+
+    // Try candidates (base forms) and return the first that is 3–5 letters
+    function pickLengthCandidate(list) {
+      for (const c of list) {
+        if (c && c.length >= 3 && c.length <= 5) return c;
+      }
+      return null;
+    }
+
+    // Reduce to base form (very small and safe stemmer)
+    function toBaseCandidate(w) {
+      if (!w) return null;
+      w = w.toLowerCase().replace(/[^a-z]/g, '');
+      if (!w || STOPWORDS.has(w)) return null;
+
+      // If already 3–5, keep as top candidate
+      const cand = [];
+
+      // ING → base / de-double / +e
+      if (w.endsWith('ing') && w.length > 4) {
+        let base = w.slice(0, -3);    // playing -> play, making -> mak
+        cand.push(base);
+        if (base.length >= 2) {
+          const a = base[base.length - 2], b = base[base.length - 1];
+          if (a === b && isConsonant(a)) cand.push(base.slice(0, -1)); // running -> run
+        }
+        cand.push(base + 'e');         // mak -> make
       }
 
-      // Tokenize on words
-      const tokens = raw.match(/\b[\w']+\b/g) || [];
-      const words = [];
-
-      tokens.forEach(orig => {
-        // Skip proper nouns
-        if (/^[A-Z]/.test(orig)) return;
-        // Normalize
-        let w = orig.toLowerCase().replace(/[^a-z]/g, '');
-        if (!w) return;
-        // Exclude common function words / auxiliaries
-        const aux = new Set([
-                             'a','an','the','and','but','or','so','if','for','nor','yet','with','from','that','in','on','at','by','to','of',
-                             'is','am','are','was','were','be','have','has','had','do','does','did','will','would','shall','should','may','might','must','can','could',
-                             'as','not','then','very','alot','much'
-                           ]);
-        if (aux.has(w)) return;
-        // Apply suffix rules
-        for (const rule of suffixRules) {
-          if (w.endsWith(rule.end) && w.length > rule.end.length + 1) {
-            w = rule.replace(w);
-            break;
-          }
+      // ED / IED
+      if (w.endsWith('ied') && w.length > 3) {
+        cand.push(w.slice(0, -3) + 'y'); // tried -> try (too short), cried -> cry (too short), but still fine to consider later
+      } else if (w.endsWith('ed') && w.length > 3) {
+        let base = w.slice(0, -2);      // played -> play
+        cand.push(base);
+        if (base.length >= 2) {
+          const a = base[base.length - 2], b = base[base.length - 1];
+          if (a === b && isConsonant(a)) cand.push(base.slice(0, -1)); // stopped -> stop
         }
-        // Filter length
-        if (w.length < 3 || w.length > 8) return;
-        words.push(w);
-      });
+        cand.push(base + 'e');          // maked -> make
+      }
 
-      // Unique and shuffle
-      const unique = Array.from(new Set(words));
+      // IES → Y (stories -> story)
+      if (w.endsWith('ies') && w.length > 3) cand.push(w.slice(0, -3) + 'y');
+
+      // ES plural → base / +e (places -> place)
+      if (w.endsWith('es') && w.length > 3) {
+        const base = w.slice(0, -2);
+        cand.push(base);
+        cand.push(base + 'e');
+      }
+
+      // S plural (cars -> car), not 'ss'
+      if (w.endsWith('s') && !w.endsWith('ss') && w.length > 2) cand.push(w.slice(0, -1));
+
+      // Always include the raw
+      cand.push(w);
+
+      // Dedup keep order
+      const seen = new Set();
+      const uniq = cand.filter(x => { if (seen.has(x)) return false; seen.add(x); return true; });
+
+      return pickLengthCandidate(uniq);
+    }
+
+    // POS check: return 'verb' if in verbs, 'noun' if in nouns, 'both' if in both, else null
+    function classify(word) {
+      const isVerb = A1_VERBS.has(word);
+      const isNoun = A1_NOUNS.has(word);
+      if (isVerb && isNoun) return 'both';
+      if (isVerb) return 'verb';
+      if (isNoun) return 'noun';
+      return null;
+    }
+
+    document.getElementById('extractBtn').addEventListener('click', () => {
+      const raw = document.getElementById('text').value || '';
+      const wantVerbs = document.getElementById('wantVerbs').checked;
+      const wantNouns = document.getElementById('wantNouns').checked;
+      const need = parseInt(document.getElementById('needCount').value, 10) || 4;
+
+      const results = document.getElementById('results');
+      results.innerHTML = '';
+
+      if (!raw.trim()) { alert('Please paste your story.'); return; }
+      if (!wantVerbs && !wantNouns) { alert('Please select Verbs and/or Nouns.'); return; }
+
+      const tokens = raw.match(/\b[\w']+\b/g) || [];
+      const picked = [];
+
+      for (const tok of tokens) {
+        // Skip Proper Nouns (leading capital)
+        if (/^[A-Z]/.test(tok)) continue;
+
+        const base = toBaseCandidate(tok);
+        if (!base) continue;
+
+        // Enforce 3–5 letters
+        if (base.length < 3 || base.length > 5) continue;
+
+        // Check category
+        const pos = classify(base);
+        if (!pos) continue; // not in A1 lists
+
+        const allowedByChoice =
+          (wantVerbs && (pos === 'verb' || pos === 'both')) ||
+          (wantNouns && (pos === 'noun' || pos === 'both'));
+
+        if (!allowedByChoice) continue;
+
+        picked.push(base);
+      }
+
+      // Unique, keep first occurrence
+      const unique = Array.from(new Set(picked));
+
       // Shuffle
       for (let i = unique.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [unique[i], unique[j]] = [unique[j], unique[i]];
       }
 
-      const selected = unique.slice(0, 4);
-      if (selected.length < 4) {
-        results.innerHTML = `<p>Found only ${selected.length} word${selected.length !== 1 ? 's' : ''}. Need 4.</p>`;
+      const selected = unique.slice(0, need);
+
+      if (selected.length < need) {
+        const msg = `Found ${selected.length} valid A1 word(s). Need ${need}.`
+          + ` (Filters: ${wantVerbs ? 'verbs' : ''}${wantVerbs && wantNouns ? ' & ' : ''}${wantNouns ? 'nouns' : ''}; 3–5 letters; base form; real words)`;
+        results.innerHTML = `<p>${msg}</p>`;
+        if (selected.length) {
+          const div = document.createElement('div');
+          div.className = 'vocab-list';
+          div.textContent = selected.join(', ');
+          results.appendChild(div);
+        }
         return;
       }
 
